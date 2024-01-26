@@ -1,21 +1,12 @@
----
-title: "Further VS Analysis"
-output: html_document
----
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-```
 
-## R Markdown
-
-This document provides further analysis for the Value Streams, diving into costs at an activity level.
+# This document provides further analysis for the Value Streams, diving into costs at an activity level.
 
 
 ## Loading Packages
-The following code is used to upload the packages to allow for easy access to a range of useful functions.
+# The following code is used to upload the packages to allow for easy access to a range of useful functions.
 
-``` {r, message = FALSE, warning = FALSE, include = FALSE}
+
 # Load the packages needed
 library(dplyr)
 library(stringr)
@@ -28,12 +19,10 @@ library(scales)
 library(plotly)
 install.packages(str_c(filepath, "/packcircles_0.3.5.tar.gz"), repos = NULL, type = "source")
 library(packcircles)
-```
+
 
 
 # Setting Variables
-
-``` {r}
 # Update below if the benefit products change
 ben_prod_list <- list()
 ben_prod_list$AA <- c("AA Load", "AA New Claims")
@@ -58,16 +47,13 @@ ben_prod_list$UC <- c('UC Benefit Handling', 'LM PA UC', 'LM Signing UC')
 # 2. ben_list
 # 3. customer_vs_list
 # 4. combined_table
-```
+
 
 
 
 # Data Loading & Processing
+# 1. Loads the activity tables and creates an activity table for each benefit (e.g. AA_Acts)
 
-
-1. Loads the activity tables and creates an activity table for each benefit (e.g. AA_Acts)
-
-``` {r}
 for (ben in ben_list){
   # Creates an empty dataframe [benefit]_Acts that will be populated later
   assign(str_c(ben, "_Acts"), data.frame())
@@ -105,12 +91,10 @@ for (ben in ben_list){
       }
   }
 }
-```
 
 
-2. Combines all the activities into one data frame
 
-``` {r}
+# 2. Combines all the activities into one data frame
 # Create a dataframe to store all the activities
 combined_acts <- data.frame()
 
@@ -130,13 +114,13 @@ for (ben in ben_list){
 # UPDATE / REMOVE if the category "Processing" changes
 combined_acts <- combined_acts %>%
   mutate(Category = replace(Category, Category == "Processing", "Benefit Handling*"))
-```
 
 
 
-3. Creating processed activity tables for each benefit  
 
-``` {r}
+# 3. Creating processed activity tables for each benefit  
+
+
 # Creates a function that sums the cost for each activity for each benefit (disregards the product)
 # This function also removes corporate, digital and estates costs
 
@@ -180,18 +164,16 @@ sum_act_costs <- function(ben){
   # Returns act_table
   return(act_table)
 }
-```
 
 
 
-``` {r}
 # Runs a for loop to sum costs by activity for each benefit
 # Overwrites the [benefit]_Acts table to store this
 for (ben in ben_list){
   assign(str_c(ben, "_Acts_Processed"), 
          sum_act_costs(ben))
 }
-```
+
 
 
 
@@ -201,18 +183,15 @@ for (ben in ben_list){
 
 # Data Visualisations
 
-1. Finding the n most costly activities for each benefit  
+# 1. Finding the n most costly activities for each benefit  
 
-
-
-``` {r}
 # Function that identifies the [n] most expensive activities for [ben]
 # then creates a plot and saves it, and prints a useful table & summary statement
 # [ben] should take string inputs that are in ben_list (e.g. "AA", "CA", etc)
 # n should take a numerical input for how many activities you want to include; Default is n=5
 
 ben_top_acts <- function(ben, n=5){
-  # 1. Creates a ben_top_n table that takes the [n] most expensive acts from the [ben]_Acts table
+  # 1.1 Creates a ben_top_n table that takes the [n] most expensive acts from the [ben]_Acts table
   # Only retains Activity, Category and Total columns then adds Percent_Of_Total and Benefit columns
   ben_top_n <- get(str_c(ben, "_Acts_Processed")) %>%
     arrange(desc(Total)) %>%
@@ -221,7 +200,7 @@ ben_top_acts <- function(ben, n=5){
     mutate(Percent_Of_Total = Total/sum(get(str_c(ben, "_Acts_Processed"))$Total) * 100,
            Benefit = ben)
   
-  # 2. Creates the packed circles visualisation
+  # 1.2 Creates the packed circles visualisation
   # Creates data needed
   data <- ben_top_n
   
@@ -253,7 +232,7 @@ ben_top_acts <- function(ben, n=5){
   # Outputs the plot
   print(p)
   
-  # 3. Creates and prints summary statement
+  # 1.3 Creates and prints summary statement
   # Percentage of costs belonging to top n activities for benefit [ben]
   pct_costs <- round(sum(ben_top_n$Percent_Of_Total))
   print(str_c(pct_costs, "% of ", ben, "'s operational costs came from its ", n, " most expensive activities"))
@@ -264,10 +243,9 @@ ben_top_acts <- function(ben, n=5){
             Percent_Of_Total = str_c(round(Percent_Of_Total), "%"))
   print(ben_top_n)
 }
-```
 
 
-``` {r}
+
 # Set this to TRUE if you want to save the packed circle plots created from applying ben_top_acts to each benefit
 # It can be useful to experiment with the number of acts to include before setting this to TRUE
 save_plot <- FALSE
@@ -283,27 +261,26 @@ for (ben in ben_list){
            width = 15, height = 15, unit = "cm", dpi = 300)
   }
 }
-```
 
 
 
 
-2. Finding the n most costly activities for each value stream
+
+# 2. Finding the n most costly activities for each value stream
 
 
-``` {r}
 # Function that identifies the [n] most expensive activities for [vs]
 # then creates a plot and saves it, and prints a useful table & summary statement
 # [vs] should take string inputs that are in customer_vs_list (e.g. "Advice & Guidance", etc)
 # n should take a numerical input for how many activities you want to include; Default is n=5
 
 vs_top_acts <- function(vs, n=5){
-  # 1. Finds the total Value Stream spend to use for dividing later
+  # 2.1 Finds the total Value Stream spend to use for dividing later
   vs_spend <- sum((combined_table %>%
     filter(Category == vs,
            fiscal_year_start == max(fiscal_year_start)))$Total)
   
-  # 2. Creates a vs_top_n table that takes the [n] most expensive acts for [vs] from combined_acts_processed
+  # 2.2 Creates a vs_top_n table that takes the [n] most expensive acts for [vs] from combined_acts_processed
   # Only retains Activity, Category and Total columns then adds Percent_Of_Total column
   vs_top_n <- combined_acts %>%
     group_by(Activity, Category) %>%
@@ -314,7 +291,7 @@ vs_top_acts <- function(vs, n=5){
     slice(1:n) %>%
     mutate(Percent_Of_Total = Total/vs_spend * 100)
   
-  # 3. Creates the packed circles visualisation
+  # 2.3 Creates the packed circles visualisation
   # Creates data needed
   data <- vs_top_n
   
@@ -346,21 +323,20 @@ vs_top_acts <- function(vs, n=5){
   # Outputs the plot
   print(p)
   
-  # 4. Creates and prints summary statement
+  # 2.4 Creates and prints summary statement
   # Percentage of costs belonging to top n activities for benefit [ben]
   pct_costs <- round(sum(vs_top_n$Percent_Of_Total))
   print(str_c(pct_costs, "% of ", vs, "'s costs came from its ", n, " most expensive activities"))
   
-  # 5. Creates and prints summary table
+  # 2.5. Creates and prints summary table
   vs_top_n <- vs_top_n %>%
      mutate(Total = str_c("£", round(Total/1e6, 1), "m"), 
             Percent_Of_Total = str_c(round(Percent_Of_Total), "%"))
   print(vs_top_n)
 }
-```
 
 
-``` {r}
+
 # Set this to TRUE if you want to save the packed circle plots created from applying ben_top_acts to each benefit
 # It can be useful to experiment with the number of acts to include before setting this to TRUE
 save_plot <- FALSE
@@ -376,7 +352,7 @@ for (vs in customer_vs_list){
            width = 15, height = 15, unit = "cm", dpi = 300)
   }
 }
-```
+
 
 
 
