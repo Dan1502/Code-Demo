@@ -59,7 +59,7 @@ for (ben in ben_list){
   assign(str_c(ben, "_Acts"), data.frame())
   # Runs a for loop to load all the activity tables into the RStudio environment
   for (prod in ben_prod_list[[ben]]){
-    # Replaces the dash in prod name (if exists) as variables shouldn't include dashes in their name
+    ## Replaces the dash in prod name (if exists) as variables shouldn't include dashes in their name
     name <- gsub("-", "", prod)
     # Replaces the space in prod names with an underline for easier variable name assignment
     name <- gsub(" ", "_", name)
