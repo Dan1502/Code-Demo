@@ -1,0 +1,391 @@
+---
+title: "Further VS Analysis"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This document provides further analysis for the Value Streams, diving into costs at an activity level.
+
+
+## Loading Packages
+The following code is used to upload the packages to allow for easy access to a range of useful functions.
+
+``` {r, message = FALSE, warning = FALSE, include = FALSE}
+# Load the packages needed
+library(dplyr)
+library(stringr)
+library(tidyr)
+
+# Package for data viz
+library(ggplot2)
+library(ggthemes)
+library(scales)
+library(plotly)
+install.packages(str_c(filepath, "/packcircles_0.3.5.tar.gz"), repos = NULL, type = "source")
+library(packcircles)
+```
+
+
+# Setting Variables
+
+``` {r}
+# Update below if the benefit products change
+ben_prod_list <- list()
+ben_prod_list$AA <- c("AA Load", "AA New Claims")
+ben_prod_list$CA <- c("CA Load", "CA New Claims")
+ben_prod_list$CMG <- c("CMG Applications", "CMG Load")
+ben_prod_list$DLA <- c("DLA Load", "DLA New Claims")
+ben_prod_list$ESA <- c("ESA Load", "ESA New Claims", "LM PA ESA")
+ben_prod_list$IS <- c("IS Load", "IS New Claims", "LM PA IS")
+ben_prod_list$JSA <- c("JSA Load", "JSA New Claims", "LM PA JSA", "LM PA JSA NJI", "LM Signing JSA")
+ben_prod_list$Other <- c("Non DWP Work (SP)", "Other Benefits Load", "Social Fund (SF)", "Non DWP Work (EA)", 
+                         "Other Benefits New Claims", "CC Load", "CC New Claims", "IPC Other Benefit", 
+                         "SP Policy - Pension Age", "SP Policy - Working Age", "EA Policy", "IB Load")
+ben_prod_list$PC <- c("PC Load", "PC New Claims")
+ben_prod_list$PIP <- c("PIP Load", "PIP New Claims")
+ben_prod_list$SP <- c('SP Load', 'SP New Claims', 'Future Pensions Centre Statements', 'IPC SP Claims', 'IPC SP Load')
+ben_prod_list$UC <- c('UC Benefit Handling', 'LM PA UC', 'LM Signing UC')
+
+
+
+# Other inputs needed from VS_Base_Graphs:
+# 1. years
+# 2. ben_list
+# 3. customer_vs_list
+# 4. combined_table
+```
+
+
+
+# Data Loading & Processing
+
+
+1. Loads the activity tables and creates an activity table for each benefit (e.g. AA_Acts)
+
+``` {r}
+for (ben in ben_list){
+  # Creates an empty dataframe [benefit]_Acts that will be populated later
+  assign(str_c(ben, "_Acts"), data.frame())
+  # Runs a for loop to load all the activity tables into the RStudio environment
+  for (prod in ben_prod_list[[ben]]){
+    # Replaces the dash in prod name (if exists) as variables shouldn't include dashes in their name
+    name <- gsub("-", "", prod)
+    # Replaces the space in prod names with an underline for easier variable name assignment
+    name <- gsub(" ", "_", name)
+    # Saves the latest year as a variable
+    year = tail(years, 1)
+    # Tries loading the acts from the latest year
+    tryCatch(
+      # Reads the activity tables
+      assign(name, read.csv(str_c(filepath, "/", year, "/Activity_Tables/Acts_", prod, "_", year, ".csv"), 
+                            stringsAsFactors = FALSE)),
+      # Highlights which activity tables could not be loaded
+      error = function(e){
+        print(e)
+        cat(paste(prod, "failed to load\n\n"))
+      },
+      warning = function(w){
+        print(w)
+        cat(paste(prod, "failed to load\n\n"))
+      }
+    )
+    # Removes the table we loaded if Total Costs = 0 and number of rows = 1 as this table is not valid
+    if (get(name)$Total[1] == 0 & nrow(get(name) == 1)){
+      remove(list = name)
+      cat(str_c(prod, "'s activity table was removed.\n\n"))
+      }
+    # Otherwise, combines the activity table loaded to the [benefit]_Acts table created earlier
+    else {
+      assign(str_c(ben, "_Acts"), rbind(get(str_c(ben, "_Acts")), get(name)))
+      }
+  }
+}
+```
+
+
+2. Combines all the activities into one data frame
+
+``` {r}
+# Create a dataframe to store all the activities
+combined_acts <- data.frame()
+
+for (ben in ben_list){
+  # Create a new column in each of [ben]_Acts to specify which benefit the acts come from when combining
+  # Also removes X, the row number column
+  assign(str_c(ben, "_Acts"),
+  get(str_c(ben, "_Acts")) %>%
+    mutate(Benefit = ben)
+  )
+  
+  # Combine the acts with the combined_acts dataframe
+  combined_acts <- rbind(combined_acts, get(str_c(ben, "_Acts")))
+}
+
+# replaces "Processing" with "Benefit Handling*"
+# UPDATE / REMOVE if the category "Processing" changes
+combined_acts <- combined_acts %>%
+  mutate(Category = replace(Category, Category == "Processing", "Benefit Handling*"))
+```
+
+
+
+3. Creating processed activity tables for each benefit  
+
+``` {r}
+# Creates a function that sums the cost for each activity for each benefit (disregards the product)
+# This function also removes corporate, digital and estates costs
+
+sum_act_costs <- function(ben){
+  # Creates a table that sums costs over every activity & category combination
+  act_table <- combined_acts %>%
+    # filters the benefit you want
+    # Also filters out corporate, digital, estates costs
+    filter(Benefit == ben, 
+           Category %in% customer_vs_list) %>% #update to recategorise Processing to benefit handling
+    # Sums the staff, non-staff, and total costs for each activitiy regardless of product
+    group_by(Activity, Category) %>%
+    summarise(Staff_Costs = sum(Staff_Costs),
+    Non_Staff_Costs = sum(Non_Staff_Costs), 
+    Total = sum(Total)) %>%
+    ungroup()
+  
+  # Creates a table, dupe_acts, of duplicate acts in act_table
+  # Duplicate acts arise from acts having different costs for BCA, RA, Improve Employability.
+  dupe_acts <- act_table %>%
+    group_by(Activity) %>%
+    mutate(Count = n()) %>%
+    filter(Count > 1) %>%
+    ungroup()
+  
+  # Edits the dupe_acts table to sum costs for these activities and rename their category to "Benefit Handling*"
+  dupe_acts <- dupe_acts %>%
+    group_by(Activity) %>%
+    summarise(Category = "Benefit Handling*", 
+              Staff_Costs = sum(Staff_Costs),
+              Non_Staff_Costs = sum(Non_Staff_Costs),
+              Total = sum(Total)) %>%
+    ungroup()
+  
+  # Filters out the duplicate acts from the main act_table
+  act_table <- act_table %>%
+    filter(!(Activity %in% dupe_acts$Activity)) %>%
+    # Adds in the summed up duplicate acts back into the act_table
+    rbind(dupe_acts)
+  
+  # Returns act_table
+  return(act_table)
+}
+```
+
+
+
+``` {r}
+# Runs a for loop to sum costs by activity for each benefit
+# Overwrites the [benefit]_Acts table to store this
+for (ben in ben_list){
+  assign(str_c(ben, "_Acts_Processed"), 
+         sum_act_costs(ben))
+}
+```
+
+
+
+
+
+
+
+# Data Visualisations
+
+1. Finding the n most costly activities for each benefit  
+
+
+
+``` {r}
+# Function that identifies the [n] most expensive activities for [ben]
+# then creates a plot and saves it, and prints a useful table & summary statement
+# [ben] should take string inputs that are in ben_list (e.g. "AA", "CA", etc)
+# n should take a numerical input for how many activities you want to include; Default is n=5
+
+ben_top_acts <- function(ben, n=5){
+  # 1. Creates a ben_top_n table that takes the [n] most expensive acts from the [ben]_Acts table
+  # Only retains Activity, Category and Total columns then adds Percent_Of_Total and Benefit columns
+  ben_top_n <- get(str_c(ben, "_Acts_Processed")) %>%
+    arrange(desc(Total)) %>%
+    slice(1:n) %>%
+    select(Activity, Category, Total) %>%
+    mutate(Percent_Of_Total = Total/sum(get(str_c(ben, "_Acts_Processed"))$Total) * 100,
+           Benefit = ben)
+  
+  # 2. Creates the packed circles visualisation
+  # Creates data needed
+  data <- ben_top_n
+  
+  # Generate the layout. This function return a dataframe with one line per bubble. 
+  # It gives its center (x and y) and its radius, proportional of the value
+  packing <- circleProgressiveLayout(data$Total, sizetype = 'area')
+  
+  # We can add these packing information to the initial data frame
+  data <- cbind(data, packing)
+  
+  # The next step is to go from one center + a radius to the coordinates of a circle that
+  # is drawn by a multitude of straight lines.
+  dat.gg <- circleLayoutVertices(packing, npoints = 50)
+  dat.gg$Total <- rep(data$Total, each = 51)
+  
+  # Create the plot
+  p <- ggplot() +
+    # Make the bubbles
+    geom_polygon(data = dat.gg, aes(x, y, group = id, fill=Total), colour = "black", alpha = 0.6) +
+    scale_fill_distiller(palette = "Blues", direction = 1) +
+    # Add text in the center of each bubble + control its size
+    geom_text(data = data, color = "black", size = 2.5,
+              aes(x, y, label = stringr::str_wrap(Activity, 15))) + 
+    scale_size_continuous(range = c(1,4)) +
+    # General theme:
+    theme_void() + 
+    theme(legend.position = "none") +
+    coord_equal()
+  # Outputs the plot
+  print(p)
+  
+  # 3. Creates and prints summary statement
+  # Percentage of costs belonging to top n activities for benefit [ben]
+  pct_costs <- round(sum(ben_top_n$Percent_Of_Total))
+  print(str_c(pct_costs, "% of ", ben, "'s operational costs came from its ", n, " most expensive activities"))
+  
+  # 4. Creates and prints summary table
+  ben_top_n <- ben_top_n %>%
+     mutate(Total = str_c("£", round(Total/1e6, 1), "m"), 
+            Percent_Of_Total = str_c(round(Percent_Of_Total), "%"))
+  print(ben_top_n)
+}
+```
+
+
+``` {r}
+# Set this to TRUE if you want to save the packed circle plots created from applying ben_top_acts to each benefit
+# It can be useful to experiment with the number of acts to include before setting this to TRUE
+save_plot <- FALSE
+
+# Runs a for loop to apply ben_top_acts to each benefit
+for (ben in ben_list){
+  # We set the number of acts outside the function so we can use the variable in ggsave as well
+  num_acts = 7
+  ben_top_acts(ben, n = num_acts)
+  # Saves the plot in each iteration if save_plot is TRUE
+  if (save_plot){
+    ggsave(filename = str_c(filepath, "/Graphs/Activity Appendix/", ben, " top ", num_acts, ".png"), 
+           width = 15, height = 15, unit = "cm", dpi = 300)
+  }
+}
+```
+
+
+
+
+2. Finding the n most costly activities for each value stream
+
+
+``` {r}
+# Function that identifies the [n] most expensive activities for [vs]
+# then creates a plot and saves it, and prints a useful table & summary statement
+# [vs] should take string inputs that are in customer_vs_list (e.g. "Advice & Guidance", etc)
+# n should take a numerical input for how many activities you want to include; Default is n=5
+
+vs_top_acts <- function(vs, n=5){
+  # 1. Finds the total Value Stream spend to use for dividing later
+  vs_spend <- sum((combined_table %>%
+    filter(Category == vs,
+           fiscal_year_start == max(fiscal_year_start)))$Total)
+  
+  # 2. Creates a vs_top_n table that takes the [n] most expensive acts for [vs] from combined_acts_processed
+  # Only retains Activity, Category and Total columns then adds Percent_Of_Total column
+  vs_top_n <- combined_acts %>%
+    group_by(Activity, Category) %>%
+    summarise(Total = sum(Total)) %>%
+    ungroup() %>%
+    filter(Category == vs) %>%
+    arrange(desc(Total)) %>%
+    slice(1:n) %>%
+    mutate(Percent_Of_Total = Total/vs_spend * 100)
+  
+  # 3. Creates the packed circles visualisation
+  # Creates data needed
+  data <- vs_top_n
+  
+  # Generate the layout. This function return a dataframe with one line per bubble. 
+  # It gives its center (x and y) and its radius, proportional of the value
+  packing <- circleProgressiveLayout(data$Total, sizetype = 'area')
+  
+  # We can add these packing information to the initial data frame
+  data <- cbind(data, packing)
+  
+  # The next step is to go from one center + a radius to the coordinates of a circle that
+  # is drawn by a multitude of straight lines.
+  dat.gg <- circleLayoutVertices(packing, npoints = 50)
+  dat.gg$Total <- rep(data$Total, each = 51)
+  
+  # Create the plot
+  p <- ggplot() +
+    # Make the bubbles
+    geom_polygon(data = dat.gg, aes(x, y, group = id, fill=Total), colour = "black", alpha = 0.6) +
+    scale_fill_distiller(palette = "Blues", direction = 1) +
+    # Add text in the center of each bubble + control its size
+    geom_text(data = data, color = "black", size = 2.5,
+              aes(x, y, label = stringr::str_wrap(Activity, 15))) + 
+    scale_size_continuous(range = c(1,4)) +
+    # General theme:
+    theme_void() + 
+    theme(legend.position = "none") +
+    coord_equal()
+  # Outputs the plot
+  print(p)
+  
+  # 4. Creates and prints summary statement
+  # Percentage of costs belonging to top n activities for benefit [ben]
+  pct_costs <- round(sum(vs_top_n$Percent_Of_Total))
+  print(str_c(pct_costs, "% of ", vs, "'s costs came from its ", n, " most expensive activities"))
+  
+  # 5. Creates and prints summary table
+  vs_top_n <- vs_top_n %>%
+     mutate(Total = str_c("£", round(Total/1e6, 1), "m"), 
+            Percent_Of_Total = str_c(round(Percent_Of_Total), "%"))
+  print(vs_top_n)
+}
+```
+
+
+``` {r}
+# Set this to TRUE if you want to save the packed circle plots created from applying ben_top_acts to each benefit
+# It can be useful to experiment with the number of acts to include before setting this to TRUE
+save_plot <- FALSE
+
+# Runs a for loop to apply ben_top_acts to each benefit
+for (vs in customer_vs_list){
+  # We set the number of acts outside the function so we can use the variable in ggsave as well
+  num_acts = 5
+  vs_top_acts(vs, n = num_acts)
+  # Saves the plot in each iteration if save_plot is TRUE
+  if (save_plot){
+    ggsave(filename = str_c(filepath, "/Graphs/Activity Appendix/", vs, " top ", num_acts, ".png"), 
+           width = 15, height = 15, unit = "cm", dpi = 300)
+  }
+}
+```
+
+
+
+
+
+
+
+
+
+
+
+
