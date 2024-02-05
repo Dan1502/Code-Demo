@@ -1,0 +1,64 @@
+select distinct trans_type_desc from [20_AND_21_SALES] where Disc1Value != 0
+
+-- Sales data by Transaction Type
+with CTE_Discounts AS (
+select Trans_type_Desc,
+avg(totaldiscount) as avg_discount,
+count(*) as transactions, 
+sum(amountnet) as revenue,
+sum(profit) as profit
+from [Temp_profit]
+group by Trans_type_Desc
+)
+select * , 
+100 * CONVERT(float, transactions)/(select count(*) from [Temp_profit])  as percent_of_transactions,
+100 * revenue/(select sum(amountnet) from [Temp_profit]) as percent_of_revenue,
+100 * profit/(select sum(profit) from [Temp_profit]) as percent_of_profit
+from CTE_Discounts
+
+
+-- Sales data by customers
+with CTE_Customers AS (
+select CardType, count(*) as transactions, sum(AmountNet) as revenue, sum(profit) as profit from [Temp_profit]
+group by CardType
+)
+select *, 
+100 * CONVERT(float, transactions)/(select count(*) from [Temp_profit]) as percent_of_transactions,
+100 * revenue/(select sum(amountnet) from [Temp_profit]) as percent_of_revenue,
+100 * profit/(select sum(profit) from [Temp_profit]) as percent_of_profit
+from CTE_Customers
+
+
+
+
+-- Creating a view with products ranked by how profitable they are in each outlet
+drop view if exists [Outlet-Category]
+create view [Outlet-Category_Profit] as 
+with CTE_Outlet_Categories as (
+select sales.outlet, cat.Description, sum(sales.profit) as prft
+from Temp_profit sales
+join Categories cat
+on sales.category_code = cat.CategoryCode
+group by sales.outlet, cat.Description
+)
+select outlet, Description, prft,
+row_number() over (partition by outlet order by prft desc) as position
+from CTE_Outlet_Categories;
+
+select * from [Outlet-Category_Profit]
+
+
+-- Creating a view with products ranked by how much revenue they generate in each outlet
+create view [Outlet-Category_Revenue] as 
+with CTE_Outlet_Categories as (
+select sales.outlet, cat.Description, sum(sales.amountnet) as revenue
+from Temp_profit sales
+join Categories cat
+on sales.category_code = cat.CategoryCode
+group by sales.outlet, cat.Description
+)
+select outlet, Description, revenue,
+row_number() over (partition by outlet order by revenue desc) as position
+from CTE_Outlet_Categories;
+
+
