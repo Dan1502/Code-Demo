@@ -1,0 +1,50 @@
+-- Total discounted transactions per month for 2020 & 2021
+select year(bizdate) as Year, month(bizdate) as Month, count(*) as discount_total from [20_21_Sales]
+where disc1value != 0
+group by year(bizdate), month(bizdate)
+order by year(bizdate), month(bizdate);
+
+-- Total transactions per month for 2020 & 2021
+select year(bizdate) as Year, month(bizdate), count(*) as total_transactions from [20_21_Sales]
+group by year(bizdate), month(bizdate)
+order by year(bizdate), month(bizdate);
+
+
+-- Sales with No Revenue
+select distinct(Description) from [20_21_Sales]
+where amountnet = 0;
+
+select trans_type_desc, count(*) from [20_21_Sales]
+where amountnet = 0
+group by Trans_type_Desc;
+
+select Outlet, count(*) from [20_21_Sales]
+where amountnet = 0
+group by Outlet;
+
+
+-- Transactions made per outlet per month 2020
+select outlet, month(bizdate) as Month, count(*) as total_transactions from [2020_Sales]
+group by outlet, month(bizdate)
+order by outlet, month(bizdate);
+
+-- Transactions made per outlet per month 2021
+select outlet, month(bizdate) as Month, count(*) as total_transactions from [2021_Sales]
+group by outlet, month(bizdate)
+order by outlet, month(bizdate);
+
+select outlet, sum(amountnet) as total_sales from [2020_Sales]
+group by outlet
+order by total_sales asc;
+
+
+
+
+-- Sales per category top 10, bottom 10
+select C.Description, month(S.bizdate) as Month_sales,
+sum(S.amountnet)
+from [2020_Sales] S
+JOIN [Categories] C
+ON S.category_code = C.CategoryCode
+group by C.Description, month(S.bizdate)
+order by C.Description, Month_sales;
