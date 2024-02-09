@@ -9,7 +9,11 @@ The files stored here are:
 4. SQL_Demo2
 
 # Motivations Behind Each Code File
-VS_Base_Graphs and VS_Activity_Analysis were part of the same project that analysed DWP's operational spend. This code was used to move the analysis from Excel to RStudio and made the data visualisation process at least 75% more efficient in terms of time needed to complete the analysis. Furthermore, they also allowed further and more in-depth analysis which was not possible in Excel. 
+VS_Base_Graphs and VS_Activity_Analysis were part of the same project that analysed DWP's operational spend. This code was used to move the analysis from Excel to RStudio and made the data visualisation process at least 50% more efficient in terms of time needed to complete the analysis. Furthermore, they also allowed further and more in-depth analysis which was not possible in Excel. 
+
+SQL_Demo1 and SQL_Demo2 were SQL code I wrote during my internship in Orange Convenience Stores. This code was mainly used to explore various aspects of the performance of the retail stores.
+
+
 
 
 
